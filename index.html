@@ -2,123 +2,144 @@
 <html lang="ja">
 <head>
     <meta charset="UTF-8">
-    <title>Live Stream - Stable Sync</title>
+    <title>Live Stream - Final Version</title>
     <script src="https://unpkg.com/peerjs@1.5.2/dist/peerjs.min.js"></script>
     <style>
-        body { font-family: sans-serif; background: #f0f2f5; margin: 0; padding: 10px; display: flex; flex-direction: column; height: 95vh; }
-        #login-screen { position: fixed; top:0; left:0; width:100%; height:100%; background:#fff; display:flex; flex-direction:column; align-items:center; justify-content:center; z-index:100; }
-        .card { background: white; padding: 25px; border-radius: 12px; box-shadow: 0 4px 15px rgba(0,0,0,0.1); width: 300px; text-align:center; }
-        input { width: 90%; padding: 10px; margin: 8px 0; border: 1px solid #ddd; border-radius: 6px; }
-        #main-content { display: none; flex-direction: column; height: 100%; }
-        #video-container { flex: 1; background: #000; position: relative; border-radius: 10px; overflow: hidden; display: flex; align-items: center; justify-content: center; }
+        body { font-family: 'Helvetica Neue', Arial, sans-serif; background: #f0f2f5; margin: 0; padding: 10px; display: flex; flex-direction: column; height: 98vh; }
+        #login-screen { position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: #fff; display: flex; flex-direction: column; align-items: center; justify-content: center; z-index: 100; }
+        .card { background: white; padding: 30px; border-radius: 15px; box-shadow: 0 10px 25px rgba(0,0,0,0.1); text-align: center; width: 320px; }
+        input { width: 90%; padding: 12px; margin: 10px 0; border: 1px solid #ddd; border-radius: 8px; font-size: 16px; }
+        #main-content { display: none; flex-direction: column; height: 100%; gap: 10px; }
+        #video-container { flex: 1; background: #000; position: relative; border-radius: 12px; overflow: hidden; display: flex; align-items: center; justify-content: center; box-shadow: 0 4px 15px rgba(0,0,0,0.4); }
         video { width: 100%; height: 100%; object-fit: contain; }
-        #chat-section { height: 180px; display: flex; flex-direction: column; background: #fff; margin-top: 10px; border-radius: 10px; overflow: hidden; }
-        #chat-box { flex: 1; overflow-y: auto; padding: 10px; font-size: 14px; border-bottom: 1px solid #eee; }
-        .status-badge { position: absolute; top: 10px; left: 10px; color: #fff; background: rgba(0,0,0,0.7); padding: 4px 10px; border-radius: 15px; font-size: 11px; z-index: 10; }
-        button { cursor: pointer; padding: 10px 15px; border-radius: 6px; border: none; background: #007bff; color: white; font-weight: bold; }
-        .btn-view { background: #28a745; width: 100%; margin-top: 10px; }
+        #chat-section { height: 200px; display: flex; flex-direction: column; background: #fff; border-radius: 12px; overflow: hidden; border: 1px solid #eee; }
+        #chat-box { flex: 1; overflow-y: auto; padding: 15px; font-size: 14px; background: #f9f9f9; }
+        .status-badge { position: absolute; top: 15px; left: 15px; color: #fff; background: rgba(0,0,0,0.7); padding: 6px 12px; border-radius: 20px; font-size: 12px; z-index: 10; }
+        button { cursor: pointer; padding: 12px; border-radius: 8px; border: none; background: #007bff; color: white; font-weight: bold; }
+        .btn-viewer { background: #28a745; margin-top: 10px; width: 100%; }
+        #load-video-btn { position: absolute; z-index: 20; background: #ff4757; display: none; padding: 15px 30px; font-size: 18px; box-shadow: 0 4px 15px rgba(0,0,0,0.3); }
+        #admin-controls { display: none; padding: 10px; background: #fff; border-radius: 12px; gap: 10px; }
     </style>
 </head>
 <body>
 
 <div id="login-screen">
     <div class="card">
-        <h3>Live App</h3>
-        <input type="password" id="pass-input" placeholder="パスワード(管理者のみ)">
-        <input type="text" id="room-id-input" placeholder="配信ID (例: mylive777)">
+        <h2 style="margin-top:0">Live App</h2>
+        <input type="password" id="pass-input" placeholder="パスワード(管理者の場合)">
+        <input type="text" id="room-id-input" placeholder="配信ID (例: my-secret-room)">
+        <p style="font-size:12px; color:#999;">※管理者と視聴者で同じIDを入力してください</p>
         <button onclick="start('admin')" style="width:100%">管理者として開始</button>
         <hr style="margin:20px 0; border:0; border-top:1px solid #eee;">
-        <button onclick="start('viewer')" class="btn-view">視聴者として開始</button>
+        <button onclick="start('viewer')" class="btn-viewer">視聴者として参加</button>
     </div>
 </div>
 
 <div id="main-content">
     <div id="video-container">
-        <div id="status" class="status-badge">準備中...</div>
-        <video id="video-display" autoplay playsinline controls></video>
+        <div id="status" class="status-badge">スタンバイ中...</div>
+        <button id="load-video-btn" onclick="manualPlay()">▶ 映像を再生する</button>
+        <video id="video-display" autoplay playsinline></video>
     </div>
+
     <div id="chat-section">
         <div id="chat-box"></div>
-        <div style="display:flex; padding:5px; gap:5px;">
-            <input type="text" id="chat-input" style="flex:1; margin:0;" placeholder="メッセージ...">
-            <button id="send-btn">送信</button>
+        <div style="display:flex; padding:8px; gap:5px; background:#fff;">
+            <input type="text" id="chat-input" style="flex:1; margin:0;" placeholder="メッセージを入力...">
+            <button id="send-btn" style="padding:0 20px;">送信</button>
         </div>
     </div>
-    <div id="admin-controls" style="display:none; padding:10px; background:#fff; margin-top:5px; border-radius:10px;">
-        <button onclick="toggleMic()" id="mic-btn">マイク: ON</button>
+
+    <div id="admin-controls" id="controls-div">
+        <button onclick="toggleMic()" id="mic-btn" style="background:#57606f">マイク: ON</button>
+        <button onclick="location.reload()" style="background:#ff4757; margin-left:auto;">配信終了</button>
     </div>
 </div>
 
 <script>
-    const ADMIN_PASS = "pass"; 
-    const CONFIG = { config: { 'iceServers': [{ urls: 'stun:stun.l.google.com:19302' }] } };
-    let peer, conn, currentStream, targetRoomId;
+    const ADMIN_PASS = "pass"; // 管理者パスワード
+    const PEER_CONFIG = {
+        config: { 'iceServers': [{ urls: 'stun:stun.l.google.com:19302' }, { urls: 'stun:stun1.l.google.com:19302' }] }
+    };
+
+    let peer, conn, currentStream, targetID;
+    const statusEl = document.getElementById('status');
+    const videoEl = document.getElementById('video-display');
+    const loadBtn = document.getElementById('load-video-btn');
 
     async function start(mode) {
-        targetRoomId = document.getElementById('room-id-input').value;
-        if (!targetRoomId) return alert("IDを入力してください");
+        targetID = document.getElementById('room-id-input').value.trim();
+        if (!targetID) return alert("IDを入力してください");
 
         document.getElementById('login-screen').style.display = 'none';
         document.getElementById('main-content').style.display = 'flex';
 
         if (mode === 'admin') {
             if (document.getElementById('pass-input').value !== ADMIN_PASS) {
-                alert("パスワード不正"); location.reload(); return;
+                alert("パスワードが違います"); location.reload(); return;
             }
-            document.getElementById('admin-controls').style.display = 'block';
-            initAdmin();
+            document.getElementById('admin-controls').style.display = 'flex';
+            setupAdmin();
         } else {
-            initViewer();
+            setupViewer();
         }
     }
 
-    async function initAdmin() {
-        try {
-            currentStream = await navigator.mediaDevices.getDisplayMedia({ video: true, audio: true });
-            document.getElementById('video-display').srcObject = currentStream;
-            document.getElementById('video-display').muted = true;
+    function setupAdmin() {
+        navigator.mediaDevices.getDisplayMedia({ video: true, audio: true }).then(stream => {
+            currentStream = stream;
+            videoEl.srcObject = stream;
+            videoEl.muted = true;
 
-            peer = new Peer(targetRoomId, CONFIG);
-            peer.on('open', id => document.getElementById('status').innerText = "配信中 ID: " + id);
+            peer = new Peer(targetID, PEER_CONFIG);
+            peer.on('open', id => statusEl.innerText = "配信中 - ID: " + id);
             peer.on('call', call => {
-                console.log("映像リクエストを受信");
+                statusEl.innerText = "視聴者が接続しました！";
                 call.answer(currentStream);
             });
             peer.on('connection', c => {
                 conn = c;
                 conn.on('data', data => appendChat(data.user, data.msg));
-                appendChat("システム", "視聴者が参加しました");
             });
-        } catch (e) { alert("共有エラー"); location.reload(); }
+        }).catch(() => { alert("共有を許可してください"); location.reload(); });
     }
 
-    function initViewer() {
-        peer = new Peer(CONFIG);
+    function setupViewer() {
+        peer = new Peer(PEER_CONFIG);
         peer.on('open', () => {
-            document.getElementById('status').innerText = "接続試行中...";
+            statusEl.innerText = "配信を探しています: " + targetID;
             
-            // 少し遅らせてから接続（管理者の準備待ち）
-            setTimeout(() => {
-                // チャット接続
-                conn = peer.connect(targetRoomId);
-                conn.on('open', () => {
-                    appendChat("システム", "配信に接続しました");
-                    // 映像を要求
-                    const call = peer.call(targetRoomId, new MediaStream());
-                    call.on('stream', stream => {
-                        const v = document.getElementById('video-display');
-                        v.srcObject = stream;
-                        v.play(); // 強制再生
-                        document.getElementById('status').innerText = "ライブ視聴中";
-                    });
+            // チャット接続
+            conn = peer.connect(targetID);
+            conn.on('open', () => {
+                appendChat("システム", "配信者に繋がりました。映像を待っています...");
+                
+                // 映像リクエスト
+                const call = peer.call(targetID, new MediaStream());
+                call.on('stream', stream => {
+                    statusEl.innerText = "信号受信！下のボタンを押して再生してください";
+                    videoEl.srcObject = stream;
+                    loadBtn.style.display = 'block'; // 赤いボタンを表示
                 });
-            }, 1000);
+            });
+        });
+        peer.on('error', () => { statusEl.innerText = "エラー: 配信が見つからないかIDが違います"; });
+    }
+
+    function manualPlay() {
+        videoEl.play().then(() => {
+            loadBtn.style.display = 'none';
+            statusEl.innerText = "ライブ視聴中";
+        }).catch(err => {
+            console.error("再生失敗", err);
+            statusEl.innerText = "再生エラー。もう一度押してください";
         });
     }
 
     function appendChat(user, msg) {
         const div = document.createElement('div');
-        div.innerHTML = `<b>${user}:</b> ${msg}`;
+        div.style.marginBottom = "8px";
+        div.innerHTML = `<b style="color:#007bff">${user}:</b> ${msg}`;
         const box = document.getElementById('chat-box');
         box.appendChild(div);
         box.scrollTop = box.scrollHeight;
@@ -134,7 +155,10 @@
 
     function toggleMic() {
         const audio = currentStream.getAudioTracks()[0];
-        if (audio) { audio.enabled = !audio.enabled; document.getElementById('mic-btn').innerText = `マイク: ${audio.enabled ? "ON" : "OFF"}`; }
+        if (audio) {
+            audio.enabled = !audio.enabled;
+            document.getElementById('mic-btn').innerText = `マイク: ${audio.enabled ? "ON" : "OFF"}`;
+        }
     }
 </script>
 </body>
