@@ -2,17 +2,17 @@
 <html lang="ja">
 <head>
     <meta charset="UTF-8">
-    <title>Live App - Final Stability</title>
+    <title>Live App - Last Trial</title>
     <script src="https://unpkg.com/peerjs@1.5.2/dist/peerjs.min.js"></script>
     <style>
-        body { font-family: sans-serif; background: #f0f2f5; margin: 0; padding: 10px; display: flex; flex-direction: column; height: 98vh; }
+        body { font-family: sans-serif; background: #eef2f3; margin: 0; padding: 10px; display: flex; flex-direction: column; height: 98vh; }
         #login-screen { position: fixed; top:0; left:0; width:100%; height:100%; background:#fff; display:flex; flex-direction:column; align-items:center; justify-content:center; z-index:100; }
-        .card { background: white; padding: 25px; border-radius: 12px; box-shadow: 0 5px 20px rgba(0,0,0,0.1); width: 300px; text-align: center; }
+        .card { background: white; padding: 25px; border-radius: 12px; box-shadow: 0 5px 20px rgba(0,0,0,0.1); width: 280px; text-align: center; }
         input { width: 90%; padding: 10px; margin: 8px 0; border: 1px solid #ddd; border-radius: 8px; }
         #main-content { display: none; flex-direction: column; height: 100%; }
         #video-container { flex: 1; background: #000; position: relative; border-radius: 12px; display: flex; align-items: center; justify-content: center; overflow: hidden; }
         video { width: 100%; height: 100%; object-fit: contain; }
-        #status-log { padding: 10px; background: #222; color: #0f0; font-family: monospace; font-size: 11px; height: 80px; overflow-y: auto; border-radius: 8px; margin-top: 5px; }
+        #status-log { padding: 8px; background: #222; color: #0f0; font-family: monospace; font-size: 10px; height: 60px; overflow-y: auto; border-radius: 8px; margin-top: 5px; }
         button { cursor: pointer; padding: 10px; border-radius: 8px; border: none; background: #007bff; color: white; font-weight: bold; }
         #load-btn { position: absolute; z-index: 20; background: #ff4757; display: none; padding: 15px; border-radius: 30px; }
     </style>
@@ -21,12 +21,12 @@
 
 <div id="login-screen">
     <div class="card">
-        <h3>Live App Stability</h3>
-        <input type="password" id="pass-input" placeholder="パスワード(管理者の場合)">
-        <input type="text" id="room-id-input" placeholder="配信ID (英数字)">
-        <button onclick="start('admin')" style="width:100%">配信を開始する</button>
+        <h3>Live App Final</h3>
+        <input type="password" id="pass-input" placeholder="パスワード(管理者)">
+        <input type="text" id="room-id-input" placeholder="配信ID">
+        <button onclick="start('admin')" style="width:100%">配信開始</button>
         <hr style="margin:20px 0; border:0; border-top:1px solid #eee;">
-        <button onclick="start('viewer')" style="background:#28a745; width:100%">視聴として参加</button>
+        <button onclick="start('viewer')" style="background:#28a745; width:100%">視聴参加</button>
     </div>
 </div>
 
@@ -35,26 +35,30 @@
         <button id="load-btn" onclick="manualPlay()">▶ 映像を再生</button>
         <video id="video-display" autoplay playsinline muted></video>
     </div>
-    <div id="status-log">ログ: 待機中...</div>
-    <div id="chat-section" style="height:120px; background:#fff; margin-top:5px; border-radius:10px; padding:5px; overflow-y:auto; font-size:12px;"></div>
+    <div id="status-log">ログ: 待機中</div>
+    <div id="chat-section" style="height:100px; background:#fff; margin-top:5px; border-radius:10px; padding:5px; overflow-y:auto; font-size:12px;"></div>
     <div style="display:flex; padding:5px; gap:5px;">
-        <input type="text" id="chat-input" style="flex:1; margin:0; padding:5px;" placeholder="チャット...">
-        <button id="send-btn" style="padding:5px 15px;">送信</button>
+        <input type="text" id="chat-input" style="flex:1; margin:0;" placeholder="チャット...">
+        <button id="send-btn">送信</button>
     </div>
 </div>
 
 <script>
     const ADMIN_PASS = "pass"; 
-    // IDの衝突を防ぐための接頭辞（これを付けることで他人のIDと被りにくくします）
-    const ID_PREFIX = "MYAPP2026_";
-    const CONFIG = { config: { 'iceServers': [{ urls: 'stun:stun.l.google.com:19302' }] } };
+    const ID_PREFIX = "LIVE2026_";
+    const CONFIG = {
+        config: { 
+            'iceServers': [{ urls: 'stun:stun.l.google.com:19302' }],
+            'sdpSemantics': 'unified-plan'
+        }
+    };
 
     let peer, conn, currentStream, targetID;
     const logEl = document.getElementById('status-log');
     const videoEl = document.getElementById('video-display');
 
-    function log(msg, color = "#0f0") {
-        logEl.innerHTML += `<br><span style="color:${color}">> ${msg}</span>`;
+    function log(msg) {
+        logEl.innerHTML += `<br>> ${msg}`;
         logEl.scrollTop = logEl.scrollHeight;
     }
 
@@ -75,51 +79,45 @@
     }
 
     function setupAdmin() {
-        navigator.mediaDevices.getDisplayMedia({ video: true, audio: true }).then(stream => {
+        // 画質を少し落として、通りやすくする設定
+        const constraints = { 
+            video: { width: { max: 640 }, frameRate: { max: 15 } }, 
+            audio: true 
+        };
+        
+        navigator.mediaDevices.getDisplayMedia(constraints).then(stream => {
             currentStream = stream;
             videoEl.srcObject = stream;
             peer = new Peer(targetID, CONFIG);
-            peer.on('open', id => log("配信サーバーに登録完了。視聴者を待っています..."));
+            peer.on('open', () => log("配信中... ID:" + targetID));
             peer.on('call', call => {
-                log("映像要求あり。送信します。");
+                log("映像要求を受信。送信開始");
                 call.answer(currentStream);
             });
             peer.on('connection', c => {
                 conn = c;
-                log("視聴者がチャットに接続しました。");
+                log("視聴者とチャット接続");
                 conn.on('data', data => appendChat(data.user, data.msg));
             });
-        }).catch(() => { alert("共有エラー"); location.reload(); });
+        }).catch(() => location.reload());
     }
 
     function setupViewer() {
-        log("ネットワーク初期化中...");
         peer = new Peer(CONFIG);
         peer.on('open', () => {
-            log("配信者(" + targetID + ")を探しています...");
-            
-            // 接続試行
+            log("配信者を探しています...");
             conn = peer.connect(targetID);
-            
-            // 10秒経っても繋がらない場合の処理
-            const failTimer = setTimeout(() => {
-                if (!conn.open) {
-                    log("【エラー】相手が見つかりません。原因：ID間違い、または配信者がまだ開始していません。", "red");
-                }
-            }, 10000);
-
             conn.on('open', () => {
-                clearTimeout(failTimer);
-                log("配信者に接続成功！映像を取得中...");
+                log("接続成功！映像を取得中...");
+                // 映像を取りに行く
                 const call = peer.call(targetID, new MediaStream());
                 call.on('stream', stream => {
-                    log("映像信号を確認。ボタンを押して再生してください。");
+                    log("信号受信！ボタンを押してください");
                     videoEl.srcObject = stream;
                     document.getElementById('load-btn').style.display = 'block';
                 });
             });
         });
-        peer.on('error', e => log("致命的エラー: " + e.type, "red"));
     }
 
     function manualPlay() {
