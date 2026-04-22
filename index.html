@@ -2,143 +2,91 @@
 <html lang="ja">
 <head>
     <meta charset="UTF-8">
-    <title>Live App - Last Trial</title>
-    <script src="https://unpkg.com/peerjs@1.5.2/dist/peerjs.min.js"></script>
+    <title>Next-Gen Video Stream</title>
+    <script src="https://download.agora.io/sdk/release/AgoraRTC_N-4.18.0.js"></script>
     <style>
-        body { font-family: sans-serif; background: #eef2f3; margin: 0; padding: 10px; display: flex; flex-direction: column; height: 98vh; }
-        #login-screen { position: fixed; top:0; left:0; width:100%; height:100%; background:#fff; display:flex; flex-direction:column; align-items:center; justify-content:center; z-index:100; }
-        .card { background: white; padding: 25px; border-radius: 12px; box-shadow: 0 5px 20px rgba(0,0,0,0.1); width: 280px; text-align: center; }
-        input { width: 90%; padding: 10px; margin: 8px 0; border: 1px solid #ddd; border-radius: 8px; }
-        #main-content { display: none; flex-direction: column; height: 100%; }
-        #video-container { flex: 1; background: #000; position: relative; border-radius: 12px; display: flex; align-items: center; justify-content: center; overflow: hidden; }
-        video { width: 100%; height: 100%; object-fit: contain; }
-        #status-log { padding: 8px; background: #222; color: #0f0; font-family: monospace; font-size: 10px; height: 60px; overflow-y: auto; border-radius: 8px; margin-top: 5px; }
-        button { cursor: pointer; padding: 10px; border-radius: 8px; border: none; background: #007bff; color: white; font-weight: bold; }
-        #load-btn { position: absolute; z-index: 20; background: #ff4757; display: none; padding: 15px; border-radius: 30px; }
+        body { font-family: sans-serif; background: #1a1a1a; color: white; margin: 0; padding: 20px; text-align: center; }
+        #video-container { width: 100%; max-width: 800px; height: 450px; background: #000; margin: 20px auto; border-radius: 12px; overflow: hidden; position: relative; }
+        #local-player, #remote-player { width: 100%; height: 100%; position: absolute; top: 0; left: 0; }
+        .controls { background: #333; padding: 20px; border-radius: 12px; display: inline-block; }
+        input { padding: 10px; border-radius: 5px; border: none; margin: 5px; }
+        button { padding: 10px 20px; border-radius: 5px; border: none; background: #007bff; color: white; cursor: pointer; font-weight: bold; }
+        #status { color: #00ff00; margin-top: 10px; font-size: 14px; }
     </style>
 </head>
 <body>
 
-<div id="login-screen">
-    <div class="card">
-        <h3>Live App Final</h3>
-        <input type="password" id="pass-input" placeholder="パスワード(管理者)">
-        <input type="text" id="room-id-input" placeholder="配信ID">
-        <button onclick="start('admin')" style="width:100%">配信開始</button>
-        <hr style="margin:20px 0; border:0; border-top:1px solid #eee;">
-        <button onclick="start('viewer')" style="background:#28a745; width:100%">視聴参加</button>
-    </div>
-</div>
+    <h2>Next-Gen Streaming</h2>
 
-<div id="main-content">
+    <div class="controls">
+        <input type="text" id="appid" placeholder="7eedc2063f254ddb9bc8988437cdcc48">
+        <input type="text" id="channel" placeholder="チャンネル名 (例: test)">
+        <br>
+        <button onclick="join('host')">配信者として開始</button>
+        <button onclick="join('audience')" style="background:#28a745;">視聴者として参加</button>
+        <button onclick="leave()" style="background:#dc3545;">終了</button>
+    </div>
+
+    <div id="status">待機中...</div>
+
     <div id="video-container">
-        <button id="load-btn" onclick="manualPlay()">▶ 映像を再生</button>
-        <video id="video-display" autoplay playsinline muted></video>
-    </div>
-    <div id="status-log">ログ: 待機中</div>
-    <div id="chat-section" style="height:100px; background:#fff; margin-top:5px; border-radius:10px; padding:5px; overflow-y:auto; font-size:12px;"></div>
-    <div style="display:flex; padding:5px; gap:5px;">
-        <input type="text" id="chat-input" style="flex:1; margin:0;" placeholder="チャット...">
-        <button id="send-btn">送信</button>
-    </div>
-</div>
+        <div id="remote-player"></div> <div id="local-player"></div>  </div>
 
 <script>
-    const ADMIN_PASS = "pass"; 
-    const ID_PREFIX = "LIVE2026_";
-    const CONFIG = {
-        config: { 
-            'iceServers': [{ urls: 'stun:stun.l.google.com:19302' }],
-            'sdpSemantics': 'unified-plan'
-        }
-    };
+    let client = AgoraRTC.createClient({ mode: "rtc", codec: "vp8" });
+    let localTracks = { videoTrack: null, audioTrack: null };
 
-    let peer, conn, currentStream, targetID;
-    const logEl = document.getElementById('status-log');
-    const videoEl = document.getElementById('video-display');
+    async function join(role) {
+        const appId = document.getElementById("appid").value;
+        const channel = document.getElementById("channel").value;
+        if (!appId || !channel) return alert("App IDとチャンネル名を入力してください");
 
-    function log(msg) {
-        logEl.innerHTML += `<br>> ${msg}`;
-        logEl.scrollTop = logEl.scrollHeight;
-    }
+        document.getElementById("status").innerText = "接続中...";
 
-    async function start(mode) {
-        const rawID = document.getElementById('room-id-input').value.trim();
-        if (!rawID) return alert("IDを入力してください");
-        targetID = ID_PREFIX + rawID;
+        // チャンネルに参加
+        await client.join(appId, channel, null, null);
 
-        document.getElementById('login-screen').style.display = 'none';
-        document.getElementById('main-content').style.display = 'flex';
-
-        if (mode === 'admin') {
-            if (document.getElementById('pass-input').value !== ADMIN_PASS) return location.reload();
-            setupAdmin();
+        if (role === 'host') {
+            // 配信者の設定：画面共有（またはカメラ）を開始
+            // ※カメラにする場合は createCameraVideoTrack に書き換え
+            localTracks.videoTrack = await AgoraRTC.createScreenVideoTrack();
+            localTracks.audioTrack = await AgoraRTC.createMicrophoneAudioTrack();
+            
+            // 自分の画面に表示
+            localTracks.videoTrack.play("local-player");
+            
+            // 世界に向けて配信（パブリッシュ）
+            await client.publish(Object.values(localTracks));
+            document.getElementById("status").innerText = "配信中！視聴者は同じIDとチャンネル名で入ってください";
         } else {
-            setupViewer();
+            // 視聴者の設定：相手が配信を始めたら自動で再生する
+            client.on("user-published", async (user, mediaType) => {
+                await client.subscribe(user, mediaType);
+                if (mediaType === "video") {
+                    user.videoTrack.play("remote-player");
+                    document.getElementById("status").innerText = "ライブ視聴中！";
+                }
+                if (mediaType === "audio") {
+                    user.audioTrack.play();
+                }
+            });
+            document.getElementById("status").innerText = "配信を待っています...";
         }
     }
 
-    function setupAdmin() {
-        // 画質を少し落として、通りやすくする設定
-        const constraints = { 
-            video: { width: { max: 640 }, frameRate: { max: 15 } }, 
-            audio: true 
-        };
-        
-        navigator.mediaDevices.getDisplayMedia(constraints).then(stream => {
-            currentStream = stream;
-            videoEl.srcObject = stream;
-            peer = new Peer(targetID, CONFIG);
-            peer.on('open', () => log("配信中... ID:" + targetID));
-            peer.on('call', call => {
-                log("映像要求を受信。送信開始");
-                call.answer(currentStream);
-            });
-            peer.on('connection', c => {
-                conn = c;
-                log("視聴者とチャット接続");
-                conn.on('data', data => appendChat(data.user, data.msg));
-            });
-        }).catch(() => location.reload());
+    async function leave() {
+        for (trackName in localTracks) {
+            var track = localTracks[trackName];
+            if (track) {
+                track.stop();
+                track.close();
+                localTracks[trackName] = null;
+            }
+        }
+        await client.leave();
+        document.getElementById("status").innerText = "終了しました";
+        location.reload();
     }
-
-    function setupViewer() {
-        peer = new Peer(CONFIG);
-        peer.on('open', () => {
-            log("配信者を探しています...");
-            conn = peer.connect(targetID);
-            conn.on('open', () => {
-                log("接続成功！映像を取得中...");
-                // 映像を取りに行く
-                const call = peer.call(targetID, new MediaStream());
-                call.on('stream', stream => {
-                    log("信号受信！ボタンを押してください");
-                    videoEl.srcObject = stream;
-                    document.getElementById('load-btn').style.display = 'block';
-                });
-            });
-        });
-    }
-
-    function manualPlay() {
-        videoEl.muted = false;
-        videoEl.play();
-        document.getElementById('load-btn').style.display = 'none';
-    }
-
-    function appendChat(user, msg) {
-        const div = document.createElement('div');
-        div.innerHTML = `<b>${user}:</b> ${msg}`;
-        document.getElementById('chat-section').appendChild(div);
-    }
-
-    document.getElementById('send-btn').onclick = () => {
-        const msg = document.getElementById('chat-input').value;
-        if (!msg || !conn) return;
-        conn.send({ user: currentStream ? "管理者" : "視聴者", msg: msg });
-        appendChat("自分", msg);
-        document.getElementById('chat-input').value = "";
-    };
 </script>
 </body>
 </html>
