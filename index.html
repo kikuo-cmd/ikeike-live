@@ -1,1 +1,48 @@
-dad419a8762a422c87f6ef5671ed9e4d
+<div class="container">
+    <button type="button" id="host-btn" class="btn btn-host" onclick="start('host')">🎥 配信を開始する</button>
+    <button type="button" id="viewer-btn" class="btn btn-viewer" onclick="start('audience')">👀 視聴を開始する</button>
+    
+    <div id="status">ステータス: 待機中</div>
+</div>
+
+<script>
+    // clientの初期化などはそのまま
+    // addEventListenerではなく、直接関数を呼ぶ形に戻し、かつエラーを画面に出す
+    async function start(role) {
+        console.log("Button clicked: " + role); // F12のコンソールに表示
+        const status = document.getElementById('status');
+        status.innerText = "ボタン反応あり: " + role;
+
+        const appid = document.getElementById('appid').value.trim();
+        const channel = document.getElementById('channel').value.trim();
+        
+        if (!appid) {
+            alert("App IDが空です");
+            return;
+        }
+
+        try {
+            await client.setClientRole(role);
+            await client.join(appid, channel, null, null);
+            status.innerText = "サーバー接続成功！";
+
+            if (role === 'host') {
+                // Chromebookでは「画面全体」ではなく「タブ」を選ぶと成功しやすいです
+                const videoTrack = await AgoraRTC.createScreenVideoTrack();
+                videoTrack.play("local-v");
+                await client.publish(videoTrack);
+                status.innerText = "🔴 配信中";
+            } else {
+                status.innerText = "受信待機中...";
+                client.on("user-published", async (user, mediaType) => {
+                    await client.subscribe(user, mediaType);
+                    if (mediaType === "video") user.videoTrack.play("remote-v");
+                    status.innerText = "映像受信成功！";
+                });
+            }
+        } catch (e) {
+            console.error(e);
+            status.innerText = "エラー詳細: " + e.message;
+        }
+    }
+</script>
