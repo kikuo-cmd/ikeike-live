@@ -2,73 +2,72 @@
 <html lang="ja">
 <head>
     <meta charset="UTF-8">
-    <title>Live Stream - Sync Fixed</title>
+    <title>Live App - Final Stability</title>
     <script src="https://unpkg.com/peerjs@1.5.2/dist/peerjs.min.js"></script>
     <style>
         body { font-family: sans-serif; background: #f0f2f5; margin: 0; padding: 10px; display: flex; flex-direction: column; height: 98vh; }
-        #login-screen { position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: #fff; display: flex; flex-direction: column; align-items: center; justify-content: center; z-index: 100; }
+        #login-screen { position: fixed; top:0; left:0; width:100%; height:100%; background:#fff; display:flex; flex-direction:column; align-items:center; justify-content:center; z-index:100; }
         .card { background: white; padding: 25px; border-radius: 12px; box-shadow: 0 5px 20px rgba(0,0,0,0.1); width: 300px; text-align: center; }
         input { width: 90%; padding: 10px; margin: 8px 0; border: 1px solid #ddd; border-radius: 8px; }
         #main-content { display: none; flex-direction: column; height: 100%; }
-        #video-container { flex: 1; background: #000; position: relative; border-radius: 12px; overflow: hidden; display: flex; align-items: center; justify-content: center; }
+        #video-container { flex: 1; background: #000; position: relative; border-radius: 12px; display: flex; align-items: center; justify-content: center; overflow: hidden; }
         video { width: 100%; height: 100%; object-fit: contain; }
-        #chat-section { height: 180px; display: flex; flex-direction: column; background: #fff; margin-top: 10px; border-radius: 12px; overflow: hidden; border: 1px solid #eee; }
-        #chat-box { flex: 1; overflow-y: auto; padding: 10px; font-size: 14px; }
-        .status-badge { position: absolute; top: 10px; left: 10px; color: #fff; background: rgba(0,0,0,0.6); padding: 5px 10px; border-radius: 15px; font-size: 11px; z-index: 10; }
-        button { cursor: pointer; padding: 12px; border-radius: 8px; border: none; background: #007bff; color: white; font-weight: bold; }
-        #load-btn { position: absolute; z-index: 20; background: #ff4757; display: none; }
+        #status-log { padding: 10px; background: #222; color: #0f0; font-family: monospace; font-size: 11px; height: 80px; overflow-y: auto; border-radius: 8px; margin-top: 5px; }
+        button { cursor: pointer; padding: 10px; border-radius: 8px; border: none; background: #007bff; color: white; font-weight: bold; }
+        #load-btn { position: absolute; z-index: 20; background: #ff4757; display: none; padding: 15px; border-radius: 30px; }
     </style>
 </head>
 <body>
 
 <div id="login-screen">
     <div class="card">
-        <h3>Live App</h3>
-        <input type="password" id="pass-input" placeholder="パスワード(管理者)">
-        <input type="text" id="room-id-input" placeholder="配信ID(例: room123)">
-        <button onclick="start('admin')" style="width:100%">管理者として開始</button>
+        <h3>Live App Stability</h3>
+        <input type="password" id="pass-input" placeholder="パスワード(管理者の場合)">
+        <input type="text" id="room-id-input" placeholder="配信ID (英数字)">
+        <button onclick="start('admin')" style="width:100%">配信を開始する</button>
         <hr style="margin:20px 0; border:0; border-top:1px solid #eee;">
-        <button onclick="start('viewer')" style="background:#28a745; width:100%">視聴者として参加</button>
+        <button onclick="start('viewer')" style="background:#28a745; width:100%">視聴として参加</button>
     </div>
 </div>
 
 <div id="main-content">
     <div id="video-container">
-        <div id="status" class="status-badge">準備中...</div>
-        <button id="load-btn" onclick="manualPlay()">▶ 映像を表示する</button>
-        <video id="video-display" autoplay playsinline></video>
+        <button id="load-btn" onclick="manualPlay()">▶ 映像を再生</button>
+        <video id="video-display" autoplay playsinline muted></video>
     </div>
-    <div id="chat-section">
-        <div id="chat-box"></div>
-        <div style="display:flex; padding:5px; gap:5px;">
-            <input type="text" id="chat-input" style="flex:1; margin:0;" placeholder="メッセージ...">
-            <button id="send-btn">送信</button>
-        </div>
-    </div>
-    <div id="admin-controls" style="display:none; padding:10px; background:#fff; margin-top:5px; border-radius:12px;">
-        <button onclick="toggleMic()" id="mic-btn">マイク: ON</button>
+    <div id="status-log">ログ: 待機中...</div>
+    <div id="chat-section" style="height:120px; background:#fff; margin-top:5px; border-radius:10px; padding:5px; overflow-y:auto; font-size:12px;"></div>
+    <div style="display:flex; padding:5px; gap:5px;">
+        <input type="text" id="chat-input" style="flex:1; margin:0; padding:5px;" placeholder="チャット...">
+        <button id="send-btn" style="padding:5px 15px;">送信</button>
     </div>
 </div>
 
 <script>
     const ADMIN_PASS = "pass"; 
-    // 通信を安定させるためのサーバー設定
-    const CONFIG = { config: { 'iceServers': [{ urls: 'stun:stun.l.google.com:19302' }, { urls: 'stun:stun1.l.google.com:19302' }] } };
+    // IDの衝突を防ぐための接頭辞（これを付けることで他人のIDと被りにくくします）
+    const ID_PREFIX = "MYAPP2026_";
+    const CONFIG = { config: { 'iceServers': [{ urls: 'stun:stun.l.google.com:19302' }] } };
 
     let peer, conn, currentStream, targetID;
-    const statusEl = document.getElementById('status');
+    const logEl = document.getElementById('status-log');
     const videoEl = document.getElementById('video-display');
 
+    function log(msg, color = "#0f0") {
+        logEl.innerHTML += `<br><span style="color:${color}">> ${msg}</span>`;
+        logEl.scrollTop = logEl.scrollHeight;
+    }
+
     async function start(mode) {
-        targetID = document.getElementById('room-id-input').value.trim();
-        if (!targetID) return alert("IDを入力してください");
+        const rawID = document.getElementById('room-id-input').value.trim();
+        if (!rawID) return alert("IDを入力してください");
+        targetID = ID_PREFIX + rawID;
 
         document.getElementById('login-screen').style.display = 'none';
         document.getElementById('main-content').style.display = 'flex';
 
         if (mode === 'admin') {
             if (document.getElementById('pass-input').value !== ADMIN_PASS) return location.reload();
-            document.getElementById('admin-controls').style.display = 'block';
             setupAdmin();
         } else {
             setupViewer();
@@ -79,63 +78,60 @@
         navigator.mediaDevices.getDisplayMedia({ video: true, audio: true }).then(stream => {
             currentStream = stream;
             videoEl.srcObject = stream;
-            videoEl.muted = true;
-
-            // 管理者は指定したIDで待機
             peer = new Peer(targetID, CONFIG);
-            peer.on('open', id => statusEl.innerText = "配信中 - ID: " + id);
-            
-            // 重要：視聴者からの「映像ください」というリクエスト（call）を待つ
+            peer.on('open', id => log("配信サーバーに登録完了。視聴者を待っています..."));
             peer.on('call', call => {
-                appendChat("システム", "映像を送信します...");
+                log("映像要求あり。送信します。");
                 call.answer(currentStream);
             });
-
             peer.on('connection', c => {
                 conn = c;
+                log("視聴者がチャットに接続しました。");
                 conn.on('data', data => appendChat(data.user, data.msg));
             });
         }).catch(() => { alert("共有エラー"); location.reload(); });
     }
 
     function setupViewer() {
-        // 視聴者はランダムなIDで作成し、管理者に繋ぎにいく
+        log("ネットワーク初期化中...");
         peer = new Peer(CONFIG);
         peer.on('open', () => {
-            statusEl.innerText = "接続中...";
+            log("配信者(" + targetID + ")を探しています...");
             
-            // 1. チャットを繋ぐ
+            // 接続試行
             conn = peer.connect(targetID);
+            
+            // 10秒経っても繋がらない場合の処理
+            const failTimer = setTimeout(() => {
+                if (!conn.open) {
+                    log("【エラー】相手が見つかりません。原因：ID間違い、または配信者がまだ開始していません。", "red");
+                }
+            }, 10000);
+
             conn.on('open', () => {
-                appendChat("システム", "配信者に繋がりました。");
-                
-                // 2. 映像を「自分から」リクエストする（ここがポイント）
+                clearTimeout(failTimer);
+                log("配信者に接続成功！映像を取得中...");
                 const call = peer.call(targetID, new MediaStream());
                 call.on('stream', stream => {
-                    statusEl.innerText = "信号受信！ボタンを押してください";
+                    log("映像信号を確認。ボタンを押して再生してください。");
                     videoEl.srcObject = stream;
                     document.getElementById('load-btn').style.display = 'block';
                 });
             });
         });
-        peer.on('error', (e) => {
-            console.error(e);
-            statusEl.innerText = "エラー: 配信が見つかりません。IDを確認してください。";
-        });
+        peer.on('error', e => log("致命的エラー: " + e.type, "red"));
     }
 
     function manualPlay() {
+        videoEl.muted = false;
         videoEl.play();
         document.getElementById('load-btn').style.display = 'none';
-        statusEl.innerText = "ライブ視聴中";
     }
 
     function appendChat(user, msg) {
         const div = document.createElement('div');
         div.innerHTML = `<b>${user}:</b> ${msg}`;
-        const box = document.getElementById('chat-box');
-        box.appendChild(div);
-        box.scrollTop = box.scrollHeight;
+        document.getElementById('chat-section').appendChild(div);
     }
 
     document.getElementById('send-btn').onclick = () => {
@@ -145,14 +141,6 @@
         appendChat("自分", msg);
         document.getElementById('chat-input').value = "";
     };
-
-    function toggleMic() {
-        const audio = currentStream.getAudioTracks()[0];
-        if (audio) {
-            audio.enabled = !audio.enabled;
-            document.getElementById('mic-btn').innerText = `マイク: ${audio.enabled ? "ON" : "OFF"}`;
-        }
-    }
 </script>
 </body>
 </html>
