@@ -1,90 +1,30 @@
-<!DOCTYPE html>
-<html lang="ja">
-<head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Professional Live Studio</title>
-    <script src="https://download.agora.io/sdk/release/AgoraRTC_N-4.18.0.js"></script>
-    <style>
-        :root { --primary: #00f2fe; --accent: #4facfe; --bg: #0f172a; --card: #1e293b; }
-        body { font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; background: var(--bg); color: white; margin: 0; display: flex; flex-direction: column; align-items: center; min-height: 100vh; }
-        
-        header { width: 100%; padding: 20px; background: rgba(255,255,255,0.03); backdrop-filter: blur(10px); border-bottom: 1px solid rgba(255,255,255,0.1); text-align: center; }
-        .live-badge { background: #ff4757; padding: 4px 12px; border-radius: 4px; font-weight: bold; font-size: 12px; margin-right: 10px; animation: blink 1.5s infinite; }
-        @keyframes blink { 50% { opacity: 0.5; } }
-
-        .main-container { width: 95%; max-width: 900px; margin-top: 25px; }
-        
-        #video-viewport { width: 100%; aspect-ratio: 16 / 9; background: #000; border-radius: 16px; position: relative; overflow: hidden; box-shadow: 0 20px 50px rgba(0,0,0,0.5); border: 1px solid rgba(255,255,255,0.1); }
-        #local-video, #remote-video { width: 100%; height: 100%; }
-
-        /* 視聴者用オーバーレイ */
-        #play-overlay { position: absolute; top: 0; left: 0; width: 100%; height: 100%; background: rgba(0,0,0,0.8); display: none; flex-direction: column; align-items: center; justify-content: center; z-index: 10; cursor: pointer; }
-        .play-btn-circle { width: 80px; height: 80px; background: var(--primary); border-radius: 50%; display: flex; align-items: center; justify-content: center; font-size: 40px; color: #000; margin-bottom: 15px; box-shadow: 0 0 20px var(--primary); }
-
-        .panel { background: var(--card); padding: 30px; border-radius: 20px; margin-top: 25px; border: 1px solid rgba(255,255,255,0.1); box-sizing: border-box; }
-        .input-group { display: flex; gap: 15px; margin-bottom: 20px; flex-wrap: wrap; }
-        input { flex: 1; min-width: 200px; background: #334155; border: 1px solid #475569; padding: 14px; border-radius: 10px; color: white; font-size: 16px; outline: none; transition: 0.3s; }
-        input:focus { border-color: var(--primary); background: #3d4b5f; }
-        
-        .btn-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 20px; }
-        .btn { padding: 16px; border-radius: 12px; border: none; font-weight: bold; font-size: 16px; cursor: pointer; transition: 0.3s; color: #000; display: flex; align-items: center; justify-content: center; gap: 8px; }
-        .btn-host { background: linear-gradient(45deg, var(--primary), var(--accent)); }
-        .btn-viewer { background: #34d399; }
-        .btn:hover { transform: translateY(-3px); box-shadow: 0 10px 20px rgba(0,0,0,0.2); }
-        .btn:active { transform: translateY(0); }
-        
-        #status-bar { margin-top: 20px; font-size: 14px; color: #94a3b8; background: rgba(0,0,0,0.2); padding: 10px; border-radius: 8px; }
-    </style>
-</head>
-<body>
-
-<header>
-    <h1><span class="live-badge">LIVE</span> STREAMING STUDIO</h1>
-</header>
-
-<div class="main-container">
-    <div id="video-viewport">
-        <div id="play-overlay" onclick="handleManualPlay()">
-            <div class="play-btn-circle">▶</div>
-            <p style="font-weight: bold;">タップして視聴を開始</p>
-        </div>
-        <div id="remote-video"></div>
-        <div id="local-video"></div>
-    </div>
-
-    <div class="panel">
-        <div class="input-group">
-            <input type="text" id="appid" placeholder="Agora App IDをここに貼り付け">
-            <input type="text" id="channel" placeholder="ルーム名" value="my-stream">
-        </div>
-        <div class="btn-grid">
-            <button type="button" class="btn btn-host" onclick="startStream('host')">🎥 配信を開始</button>
-            <button type="button" class="btn btn-viewer" onclick="startStream('audience')">👀 視聴に参加</button>
-        </div>
-        <div id="status-bar">準備完了: IDとルーム名を入力してください</div>
-    </div>
-</div>
-
-<script>
+// 1. 通信設定を強化（強制的に通り道を探す設定）
     const client = AgoraRTC.createClient({ mode: "live", codec: "vp8" });
+    
+    // ネットワークが厳しい環境用のリトライ設定
+    AgoraRTC.setLogLevel(1); // ログを詳細に出す
+
     let localTracks = { videoTrack: null, audioTrack: null };
     let remoteUser = null;
 
     const statusText = document.getElementById('status-bar');
     const playOverlay = document.getElementById('play-overlay');
 
-    // 視聴用イベント：配信者が映像を出した瞬間に動く
     client.on("user-published", async (user, mediaType) => {
-        await client.subscribe(user, mediaType);
-        remoteUser = user;
-        
-        if (mediaType === "video") {
-            statusText.innerText = "🔴 映像が届きました！";
-            playOverlay.style.display = 'flex'; // 再生ボタンを表示
-        }
-        if (mediaType === "audio") {
-            user.audioTrack.play();
+        try {
+            statusText.innerText = "信号を検知しました...";
+            await client.subscribe(user, mediaType);
+            remoteUser = user;
+            
+            if (mediaType === "video") {
+                statusText.innerText = "再生準備完了！";
+                playOverlay.style.display = 'flex';
+            }
+            if (mediaType === "audio") {
+                user.audioTrack.play();
+            }
+        } catch (e) {
+            statusText.innerText = "受信エラー: " + e.message;
         }
     });
 
@@ -92,47 +32,36 @@
         const appId = document.getElementById('appid').value.trim();
         const channel = document.getElementById('channel').value.trim();
 
-        if (!appId) {
-            alert("AgoraのApp IDを入力してください。");
-            return;
-        }
+        if (!appId) return alert("App IDを入力してください");
 
         try {
-            statusText.innerText = "接続中...";
+            statusText.innerText = "サーバーに接続を試みています...";
             await client.setClientRole(role);
+            
+            // トークンなし(null)で参加
             await client.join(appId, channel, null, null);
-            statusText.innerText = "サーバーに接続しました。";
+            statusText.innerText = "サーバー接続成功。信号を待機中...";
 
             if (role === 'host') {
-                statusText.innerText = "画面共有を準備中...";
-                // 画面全体よりも「タブ」の方がChromebookでは安定します
-                localTracks.videoTrack = await AgoraRTC.createScreenVideoTrack({ optimizationMode: "detail" });
+                statusText.innerText = "画面共有をリクエスト中...";
+                // Chromebook向け：解像度を少し下げて安定させる
+                localTracks.videoTrack = await AgoraRTC.createScreenVideoTrack({
+                    encoderConfig: { width: 640, height: 480, frameRate: 15 }
+                });
                 localTracks.audioTrack = await AgoraRTC.createMicrophoneAudioTrack();
 
                 document.getElementById('remote-video').style.display = 'none';
                 localTracks.videoTrack.play("local-video");
 
                 await client.publish(Object.values(localTracks));
-                statusText.innerText = "✅ 配信中！ ルーム名: " + channel;
-            } else {
-                statusText.innerText = "待機中... 配信者が開始すると自動的に通知されます。";
-                document.getElementById('local-video').style.display = 'none';
+                statusText.innerText = "🔴 配信中！相手に同じルーム名を伝えてください";
             }
         } catch (err) {
             console.error(err);
-            statusText.innerText = "❌ エラー: " + (err.message || err.code);
+            // 画面にエラーを直接出す
+            statusText.innerText = "❌ 接続失敗: " + err.code;
+            if(err.code === "CAN_NOT_GET_GATEWAY_SERVER") {
+                statusText.innerText = "❌ ネットワーク制限（ファイアウォール）で遮断されました";
+            }
         }
     }
-
-    // 視聴者がオーバーレイをクリックした時の処理
-    function handleManualPlay() {
-        if (remoteUser && remoteUser.videoTrack) {
-            remoteUser.videoTrack.play("remote-video");
-            playOverlay.style.display = 'none';
-            statusText.innerText = "🔴 LIVE 視聴中";
-        }
-    }
-</script>
-
-</body>
-</html>
