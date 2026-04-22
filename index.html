@@ -1,67 +1,125 @@
-// 1. 通信設定を強化（強制的に通り道を探す設定）
-    const client = AgoraRTC.createClient({ mode: "live", codec: "vp8" });
-    
-    // ネットワークが厳しい環境用のリトライ設定
-    AgoraRTC.setLogLevel(1); // ログを詳細に出す
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Fixed Live App</title>
+    <script src="https://download.agora.io/sdk/release/AgoraRTC_N-4.18.0.js"></script>
+    <style>
+        :root { --primary: #00f2fe; --bg: #0f172a; }
+        body { font-family: sans-serif; background: var(--bg); color: white; margin: 0; text-align: center; padding: 20px; }
+        .container { max-width: 800px; margin: auto; }
+        #video-viewport { width: 100%; aspect-ratio: 16/9; background: #000; border-radius: 16px; position: relative; overflow: hidden; margin-bottom: 20px; }
+        #local-video, #remote-video { width: 100%; height: 100%; position: absolute; top:0; left:0; }
+        #play-overlay { position: absolute; top:0; left:0; width:100%; height:100%; background: rgba(0,0,0,0.8); display:none; flex-direction:column; align-items:center; justify-content:center; z-index:100; cursor:pointer; }
+        .panel { background: #1e293b; padding: 20px; border-radius: 16px; border: 1px solid #334155; }
+        input { background: #334155; border: 1px solid #475569; padding: 12px; border-radius: 8px; color: white; margin: 5px; width: 40%; }
+        button { padding: 14px 24px; border-radius: 8px; border: none; font-weight: bold; cursor: pointer; margin: 5px; transition: 0.2s; }
+        .btn-host { background: var(--primary); color: #000; }
+        .btn-viewer { background: #34d399; color: #000; }
+        button:active { transform: scale(0.95); }
+        #status-bar { margin-top: 15px; font-size: 14px; color: #fbbf24; min-height: 1.5em; }
+    </style>
+</head>
+<body>
 
+<div class="container">
+    <div id="video-viewport">
+        <div id="play-overlay" onclick="handleManualPlay()">
+            <div style="font-size: 50px;">▶️</div>
+            <p>映像が届きました！クリックして再生</p>
+        </div>
+        <div id="remote-video"></div>
+        <div id="local-video"></div>
+    </div>
+
+    <div class="panel">
+        <input type="text" id="appid" placeholder="Agora App ID">
+        <input type="text" id="channel" placeholder="ルーム名" value="test-room">
+        <div style="margin-top: 10px;">
+            <button type="button" class="btn-host" onclick="startStream('host')">🎥 配信開始</button>
+            <button type="button" class="btn-viewer" onclick="startStream('audience')">👀 視聴開始</button>
+        </div>
+        <div id="status-bar">設定を入力してボタンを押してください</div>
+    </div>
+</div>
+
+<script>
+    // 1. クライアントを初期化
+    const client = AgoraRTC.createClient({ mode: "live", codec: "vp8" });
     let localTracks = { videoTrack: null, audioTrack: null };
     let remoteUser = null;
 
     const statusText = document.getElementById('status-bar');
     const playOverlay = document.getElementById('play-overlay');
 
+    // 2. 視聴者用：配信者が映像を出した時の処理をあらかじめ登録
     client.on("user-published", async (user, mediaType) => {
-        try {
-            statusText.innerText = "信号を検知しました...";
-            await client.subscribe(user, mediaType);
-            remoteUser = user;
-            
-            if (mediaType === "video") {
-                statusText.innerText = "再生準備完了！";
-                playOverlay.style.display = 'flex';
-            }
-            if (mediaType === "audio") {
-                user.audioTrack.play();
-            }
-        } catch (e) {
-            statusText.innerText = "受信エラー: " + e.message;
+        statusText.innerText = "信号を検知しました。受信を開始します...";
+        await client.subscribe(user, mediaType);
+        remoteUser = user;
+        
+        if (mediaType === "video") {
+            statusText.innerText = "映像受信成功！再生ボタンを押してください。";
+            playOverlay.style.display = 'flex';
+        }
+        if (mediaType === "audio") {
+            user.audioTrack.play();
         }
     });
 
+    // 3. メインの開始関数
     async function startStream(role) {
         const appId = document.getElementById('appid').value.trim();
         const channel = document.getElementById('channel').value.trim();
 
-        if (!appId) return alert("App IDを入力してください");
+        if (!appId) return alert("App IDを入力してください！");
 
         try {
             statusText.innerText = "サーバーに接続を試みています...";
+            
+            // ロールの設定（最重要）
             await client.setClientRole(role);
             
-            // トークンなし(null)で参加
+            // トークンなし(null)で参加（コンソールのTesting Mode設定が必要）
             await client.join(appId, channel, null, null);
-            statusText.innerText = "サーバー接続成功。信号を待機中...";
+            statusText.innerText = "サーバー接続成功！役割: " + role;
 
             if (role === 'host') {
-                statusText.innerText = "画面共有をリクエスト中...";
-                // Chromebook向け：解像度を少し下げて安定させる
+                statusText.innerText = "画面共有を準備中...";
+                
+                // Chromebook向け：少し軽めの設定
                 localTracks.videoTrack = await AgoraRTC.createScreenVideoTrack({
-                    encoderConfig: { width: 640, height: 480, frameRate: 15 }
+                    encoderConfig: { width: 1280, height: 720, frameRate: 15 }
                 });
                 localTracks.audioTrack = await AgoraRTC.createMicrophoneAudioTrack();
 
+                // 自分のプレビューを表示
                 document.getElementById('remote-video').style.display = 'none';
                 localTracks.videoTrack.play("local-video");
 
+                // 公開
                 await client.publish(Object.values(localTracks));
-                statusText.innerText = "🔴 配信中！相手に同じルーム名を伝えてください";
+                statusText.innerText = "🔴 配信中！視聴者と同じルーム名にしてください";
+            } else {
+                statusText.innerText = "配信者の信号を待っています...";
+                document.getElementById('local-video').style.display = 'none';
             }
         } catch (err) {
-            console.error(err);
-            // 画面にエラーを直接出す
-            statusText.innerText = "❌ 接続失敗: " + err.code;
-            if(err.code === "CAN_NOT_GET_GATEWAY_SERVER") {
-                statusText.innerText = "❌ ネットワーク制限（ファイアウォール）で遮断されました";
-            }
+            console.error("Error details:", err);
+            statusText.innerText = "❌ エラー: " + (err.code || err.message);
         }
     }
+
+    // 4. 視聴者がオーバーレイをクリックした時の再生処理
+    function handleManualPlay() {
+        if (remoteUser && remoteUser.videoTrack) {
+            remoteUser.videoTrack.play("remote-video");
+            playOverlay.style.display = 'none';
+            statusText.innerText = "🔴 ライブ視聴中";
+        }
+    }
+</script>
+
+</body>
+</html>
